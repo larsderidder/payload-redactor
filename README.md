@@ -5,15 +5,10 @@ Designed as a small, composable core rather than a framework-centric solution.
 
 ## Install
 
-Install from source:
+Install from PyPI:
 
 ```bash
-git clone <repo-url>
-cd <repo-name>
-python -m venv .venv
-. .venv/bin/activate
-python -m pip install -U pip
-python -m pip install .
+python -m pip install payload-redactor
 ```
 
 ## Usage
