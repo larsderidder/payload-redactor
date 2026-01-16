@@ -32,11 +32,15 @@ Documentation = "https://github.com/larsderidder/payload-redactor"
 
 [project.optional-dependencies]
 dev = ["black", "pytest"]
+sentry = ["sentry-sdk>=1.0"]
 structlog = ["structlog>=23.2"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 license-files = ["LICENSE"]
+
+[tool.setuptools.package-data]
+payload_redactor = ["py.typed"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -122,6 +122,25 @@ Output (JSON formatter):
 {"event": "user login", "level": "info", "logger": "app", "password": "[REDACTED]", "timestamp": "2024-01-01T12:00:00Z", "user_id": 123}
 ```
 
+## Sentry adapter (optional)
+
+Install with the extra:
+
+```bash
+python -m pip install .[sentry]
+```
+
+```python
+import sentry_sdk
+
+from payload_redactor import redact_sentry_before_send
+
+sentry_sdk.init(
+    dsn="https://examplePublicKey@o0.ingest.sentry.io/0",
+    before_send=redact_sentry_before_send,
+)
+```
+
 ## Development
 
 ```bash

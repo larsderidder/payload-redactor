@@ -2,6 +2,7 @@ from payload_redactor import (
     make_redactor,
     redact_event_dict,
     redact_sensitive_info,
+    redact_sentry_before_send,
     redact_with,
 )
 
@@ -46,3 +47,24 @@ def test_key_specific_replacements():
     )
     assert redacted["password"] == "***"
     assert redacted["token"] == "<hidden>"
+
+
+def test_redact_sentry_before_send():
+    class DummyRecord:
+        def __init__(self, msg, name="app"):
+            self.msg = msg
+            self.name = name
+
+    event = {
+        "extra": {"exception": "Traceback line\nValueError: bad"},
+        "logentry": {},
+        "breadcrumbs": {"values": [{"type": "log", "message": "{'event': 'password'}"}]},
+        "request": {"headers": {"authorization": "Bearer abc"}},
+    }
+    hint = {"log_record": DummyRecord({"event": "oops", "password": "secret"})}
+
+    redacted = redact_sentry_before_send(event, hint)
+
+    assert redacted["extra"]["password"] == "[REDACTED]"
+    assert redacted["request"]["headers"]["authorization"] == "[REDACTED]"
+    assert redacted["breadcrumbs"]["values"][0]["message"] == "[REDACTED]"
