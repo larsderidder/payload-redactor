@@ -1,6 +1,7 @@
 # payload-redactor
 
 Pure-function helpers for redacting sensitive data in structured payloads.
+Deterministic key-based payload redaction (not PII detection).
 Designed as a small, composable core rather than a framework-centric solution.
 
 ## Install
@@ -14,31 +15,31 @@ python -m pip install payload-redactor
 ## Usage
 
 ```python
-from payload_redactor import make_redactor, redact_sensitive_info, redact_with
+from payload_redactor import make_redactor, redact, redact_with
 
 payload = {"password": "secret", "user": "alice"}
-print(redact_sensitive_info(payload))
-print(redact_with(payload, replacement="<hidden>"))
+print(redact(payload))
+print(redact(payload, replacement="<hidden>"))
 
-redactor = make_redactor(replacement="***")
+redactor = make_redactor(replacement="###")
 print(redactor(payload))
 ```
 
 Output:
 
 ```text
-{'password': '[REDACTED]', 'user': 'alice'}
-{'password': '<hidden>', 'user': 'alice'}
 {'password': '***', 'user': 'alice'}
+{'password': '<hidden>', 'user': 'alice'}
+{'password': '###', 'user': 'alice'}
 ```
 
 Custom replacement per key:
 
 ```python
-from payload_redactor import redact_sensitive_info
+from payload_redactor import redact
 
 payload = {"password": "secret", "token": "abc"}
-redacted = redact_sensitive_info(
+redacted = redact(
     payload,
     replacement="<hidden>",
     key_replacements={"password": "***"},
@@ -49,6 +50,144 @@ Output:
 
 ```text
 {'password': '***', 'token': '<hidden>'}
+```
+
+## Examples
+
+Dict/list payload (10 lines):
+
+```python
+from payload_redactor import redact
+payload = {
+    "user": "alice",
+    "password": "secret",
+    "headers": ["authorization", "Bearer abc"],
+    "nested": {"token": "t-123"},
+}
+redacted = redact(payload)
+print(redacted["password"], redacted["headers"][1])
+print(redacted["nested"]["token"])
+```
+
+Output:
+
+```text
+*** ***
+***
+```
+
+Structured logging event dict (10 lines):
+
+```python
+from payload_redactor import redact_event_dict
+event_dict = {
+    "event": "user login",
+    "user_id": 123,
+    "password": "secret",
+    "meta": {"api_key": "k-1"},
+}
+redacted = redact_event_dict(None, None, event_dict)
+print(redacted["password"])
+print(redacted["meta"]["api_key"])
+```
+
+Output:
+
+```text
+[REDACTED]
+[REDACTED]
+```
+
+String redaction behavior (10 lines):
+
+```python
+from payload_redactor import redact
+message = "password=secret token=abc"
+print(redact(message))
+message = "no secrets here"
+print(redact(message))
+message = "authorization bearer abc"
+print(redact(message))
+message = "tokenization is not a match"
+print(redact(message))
+print(redact("dsn=https://key@host/1"))
+```
+
+Output:
+
+```text
+***=*** ***=abc
+no secrets here
+*** bearer abc
+tokenization is not a match
+dsn=https://***@host/1
+```
+
+## Policy configuration
+
+```python
+from payload_redactor import Policy, redact
+
+policy = Policy(
+    sensitive_keywords=["password", "token"],
+    key_replacements={"password": "***"},
+    string_rules=[r"Bearer\s+\S+"],
+    path_rules=[("user", "email")],
+)
+payload = {"user": {"email": "alice@example.com"}, "auth": "Bearer abc"}
+print(redact(payload, policy=policy, replacement="[REDACTED]"))
+```
+
+Output:
+
+```text
+{'user': {'email': '[REDACTED]'}, 'auth': '[REDACTED]'}
+```
+
+## Non-goals
+
+- This does not detect PII entities; it redacts based on keys/patterns.
+- This does not classify data or infer sensitivity from values.
+
+## Guarantees
+
+- Deterministic output for the same input and configuration.
+- No mutation of input dict/list/string payloads.
+- No dependencies in the core redaction module.
+- Type preservation for dict/list/string inputs; other types are returned as-is.
+
+## Common gotchas
+
+Authorization headers and cookie jars often arrive as pairs or dicts:
+
+```python
+from payload_redactor import redact
+headers = ["authorization", "Bearer abc"]
+cookies = {"cookie": "session=secret; csrftoken=abc"}
+print(redact(headers))
+print(redact(cookies))
+```
+
+Output:
+
+```text
+['authorization', '***']
+{'cookie': 'session=***; csrftoken=abc'}
+```
+
+JWTs and DSNs are not detected unless the key matches:
+
+```python
+from payload_redactor import redact
+payload = {"token": "jwt-value", "dsn": "https://key@host/1"}
+redacted = redact(payload, sensitive_keywords=["token", "dsn"])
+print(redacted["token"], redacted["dsn"])
+```
+
+Output:
+
+```text
+*** ***
 ```
 
 ## Structlog adapter (optional)
