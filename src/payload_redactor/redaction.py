@@ -11,6 +11,11 @@ SENSITIVE_TERMS = ["token", "secret", "password", "key", "authorization"]
 EXCLUDED_TERMS: list[str] = []
 
 
+def get_default_sensitive_keywords() -> list[str]:
+    """Return a copy of the default sensitive keywords."""
+    return list(SENSITIVE_TERMS)
+
+
 @dataclass(frozen=True)
 class Policy:
     """Configuration for redaction behavior."""

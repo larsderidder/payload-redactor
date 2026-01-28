@@ -1,5 +1,6 @@
 from payload_redactor import (
     Policy,
+    get_default_sensitive_keywords,
     make_redactor,
     redact,
     redact_event_dict,
@@ -7,6 +8,16 @@ from payload_redactor import (
     redact_sentry_before_send,
     redact_with,
 )
+
+
+def test_get_default_sensitive_keywords():
+    keywords = get_default_sensitive_keywords()
+    assert isinstance(keywords, list)
+    assert "password" in keywords
+    assert "token" in keywords
+    # Ensure it returns a copy, not the original
+    keywords.append("custom")
+    assert "custom" not in get_default_sensitive_keywords()
 
 
 def test_redacts_dict_keys():
