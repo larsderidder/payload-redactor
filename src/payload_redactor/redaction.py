@@ -2,17 +2,64 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import re
-from typing import Any, Iterable
+from typing import Any, Iterable, Pattern
 
 
 SENSITIVE_TERMS = ["token", "secret", "password", "key", "authorization"]
 EXCLUDED_TERMS: list[str] = []
 
 
+@dataclass(frozen=True)
+class Policy:
+    """Configuration for redaction behavior."""
+
+    sensitive_keywords: Iterable[str] | None = None
+    excluded_keywords: Iterable[str] | None = None
+    key_replacements: dict[str, str] | None = None
+    string_rules: Iterable[str | Pattern[str]] | None = None
+    header_patterns: Iterable[str | Pattern[str]] | None = None
+    path_rules: Iterable[tuple[str, ...]] | None = None
+
+
 def _normalize_terms(terms: Iterable[str] | None, fallback: list[str]) -> list[str]:
     """Normalize terms to lowercase strings."""
     return [entry.lower() for entry in (terms or fallback)]
+
+
+def _normalize_path_rules(
+    rules: Iterable[tuple[str, ...]] | None,
+) -> list[tuple[str, ...]]:
+    if not rules:
+        return []
+    normalized: list[tuple[str, ...]] = []
+    for rule in rules:
+        normalized.append(tuple(str(part).lower() for part in rule))
+    return normalized
+
+
+def _compile_patterns(
+    rules: Iterable[str | Pattern[str]] | None,
+) -> list[Pattern[str]]:
+    if not rules:
+        return []
+    compiled: list[Pattern[str]] = []
+    for rule in rules:
+        if isinstance(rule, re.Pattern):
+            compiled.append(rule)
+        else:
+            compiled.append(re.compile(rule, flags=re.IGNORECASE))
+    return compiled
+
+
+def _apply_string_rules(
+    value: str, patterns: list[Pattern[str]], replacement: str
+) -> str:
+    sanitized = value
+    for pattern in patterns:
+        sanitized = pattern.sub(replacement, sanitized)
+    return sanitized
 
 
 def _is_text_key(value: Any) -> bool:
@@ -59,16 +106,30 @@ def _apply_redaction(
     excludes: list[str],
     replacement: str,
     key_replacements: dict[str, str],
+    string_patterns: list[Pattern[str]],
+    path_rules: list[tuple[str, ...]],
+    path: tuple[str, ...],
 ) -> dict[str, Any] | list | str:
+    if path_rules and path in path_rules:
+        return replacement
     if isinstance(data, dict):
         sanitized: dict[str, Any] = {}
         for key, value in data.items():
+            path_key = str(key).lower()
+            next_path = path + (path_key,)
             if is_sensitive_key(key, keywords, excludes):
                 key_value = str(key).lower()
                 sanitized[key] = key_replacements.get(key_value, replacement)
             else:
                 sanitized[key] = _apply_redaction(
-                    value, keywords, excludes, replacement, key_replacements
+                    value,
+                    keywords,
+                    excludes,
+                    replacement,
+                    key_replacements,
+                    string_patterns,
+                    path_rules,
+                    next_path,
                 )
         return sanitized
     if isinstance(data, list):
@@ -76,13 +137,75 @@ def _apply_redaction(
         if pair is not None and is_sensitive_key(pair[0], keywords, excludes):
             key_value = str(pair[0]).lower()
             return [pair[0], key_replacements.get(key_value, replacement)]
-        return [
-            _apply_redaction(item, keywords, excludes, replacement, key_replacements)
-            for item in data
-        ]
+        sanitized_items: list[Any] = []
+        for index, item in enumerate(data):
+            next_path = path + (str(index),)
+            sanitized_items.append(
+                _apply_redaction(
+                    item,
+                    keywords,
+                    excludes,
+                    replacement,
+                    key_replacements,
+                    string_patterns,
+                    path_rules,
+                    next_path,
+                )
+            )
+        return sanitized_items
     if isinstance(data, str):
-        return _mask_string(data, keywords, replacement)
+        sanitized = _apply_string_rules(data, string_patterns, replacement)
+        return _mask_string(sanitized, keywords, replacement)
     return data
+
+
+def redact(
+    data: dict[str, Any] | list | str,
+    *,
+    policy: Policy | None = None,
+    replacement: str = "***",
+    sensitive_keywords: Iterable[str] | None = None,
+    excluded_keywords: Iterable[str] | None = None,
+    key_replacements: dict[str, str] | None = None,
+    string_rules: Iterable[str | Pattern[str]] | None = None,
+    header_patterns: Iterable[str | Pattern[str]] | None = None,
+    path_rules: Iterable[tuple[str, ...]] | None = None,
+) -> dict[str, Any] | list | str:
+    """
+    Redact sensitive information from data based on keyword and rule matching.
+    """
+    policy_sensitive = policy.sensitive_keywords if policy else None
+    policy_excluded = policy.excluded_keywords if policy else None
+    policy_key_replacements = policy.key_replacements if policy else None
+    policy_string_rules = policy.string_rules if policy else None
+    policy_header_patterns = policy.header_patterns if policy else None
+    policy_path_rules = policy.path_rules if policy else None
+
+    keywords = _normalize_terms(sensitive_keywords or policy_sensitive, SENSITIVE_TERMS)
+    excludes = _normalize_terms(excluded_keywords or policy_excluded, EXCLUDED_TERMS)
+    replacement_source = (
+        key_replacements
+        if key_replacements is not None
+        else (policy_key_replacements or {})
+    )
+    replacements = {key.lower(): value for key, value in replacement_source.items()}
+    string_patterns = _compile_patterns(string_rules or policy_string_rules)
+    string_patterns += _compile_patterns(header_patterns or policy_header_patterns)
+    normalized_paths = _normalize_path_rules(path_rules or policy_path_rules)
+
+    try:
+        return _apply_redaction(
+            data,
+            keywords,
+            excludes,
+            replacement,
+            replacements,
+            string_patterns,
+            normalized_paths,
+            (),
+        )
+    except Exception:
+        return data
 
 
 def redact_sensitive_info(
@@ -102,7 +225,9 @@ def redact_sensitive_info(
     replacements = {key.lower(): value for key, value in (key_replacements or {}).items()}
 
     try:
-        return _apply_redaction(data, keywords, excludes, replacement, replacements)
+        return _apply_redaction(
+            data, keywords, excludes, replacement, replacements, [], [], ()
+        )
     except Exception:
         return data
 
@@ -119,7 +244,9 @@ def redact_with(
     excludes = _normalize_terms(excluded_keywords, EXCLUDED_TERMS)
     replacements = {key.lower(): value for key, value in (key_replacements or {}).items()}
     try:
-        return _apply_redaction(data, keywords, excludes, replacement, replacements)
+        return _apply_redaction(
+            data, keywords, excludes, replacement, replacements, [], [], ()
+        )
     except Exception:
         return data
 
@@ -137,7 +264,9 @@ def make_redactor(
 
     def _redactor(data: dict[str, Any] | list | str) -> dict[str, Any] | list | str:
         try:
-            return _apply_redaction(data, keywords, excludes, replacement, replacements)
+            return _apply_redaction(
+                data, keywords, excludes, replacement, replacements, [], [], ()
+            )
         except Exception:
             return data
 

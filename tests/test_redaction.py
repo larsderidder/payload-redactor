@@ -1,5 +1,7 @@
 from payload_redactor import (
+    Policy,
     make_redactor,
+    redact,
     redact_event_dict,
     redact_sensitive_info,
     redact_sentry_before_send,
@@ -47,6 +49,23 @@ def test_key_specific_replacements():
     )
     assert redacted["password"] == "***"
     assert redacted["token"] == "<hidden>"
+
+
+def test_redact_policy_rules():
+    policy = Policy(
+        key_replacements={"password": "***"},
+        string_rules=[r"Bearer\s+\S+"],
+        path_rules=[("user", "email")],
+    )
+    payload = {
+        "user": {"email": "alice@example.com", "name": "alice"},
+        "auth": "Bearer abc",
+        "password": "secret",
+    }
+    redacted = redact(payload, policy=policy, replacement="[REDACTED]")
+    assert redacted["user"]["email"] == "[REDACTED]"
+    assert redacted["auth"] == "[REDACTED]"
+    assert redacted["password"] == "***"
 
 
 def test_redact_sentry_before_send():
