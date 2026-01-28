@@ -6,10 +6,8 @@ Designed as a small, composable core rather than a framework-centric solution.
 
 ## Install
 
-Install from PyPI:
-
 ```bash
-python -m pip install payload-redactor
+pip install payload-redactor
 ```
 
 ## Usage
