@@ -278,6 +278,23 @@ sentry_sdk.init(
 )
 ```
 
+## Stdlib logging adapter (optional)
+
+This adapter has no dependencies; it provides a `logging.Filter` that redacts
+`LogRecord.msg`, `LogRecord.args`, and any `extra` fields in-place.
+
+```python
+import logging
+
+from payload_redactor import make_redacting_filter
+
+logger = logging.getLogger("app")
+logger.addFilter(make_redacting_filter())
+
+logger.info({"password": "secret", "user": "alice"})
+logger.info("password=%s", "secret", extra={"token": "t-123"})
+```
+
 ## Development
 
 ```bash
