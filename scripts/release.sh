@@ -14,16 +14,6 @@ if ! command -v git >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! python -c "import build" >/dev/null 2>&1; then
-  echo "Build is required (pip install build)" >&2
-  exit 1
-fi
-
-if ! python -c "import twine" >/dev/null 2>&1; then
-  echo "Twine is required (pip install twine)" >&2
-  exit 1
-fi
-
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "Working tree is dirty; commit or stash before releasing" >&2
   exit 1
@@ -48,7 +38,7 @@ if [[ "${1:-}" == "--yes" ]]; then
 fi
 
 echo "About to release ${tag}."
-echo "This will build distributions, tag and push ${tag}, and upload to PyPI."
+echo "This will tag ${tag} and push. GitHub Actions will build and publish to PyPI."
 if [ "$skip_confirm" = false ]; then
   read -r -p "Continue? [y/N] " confirm
   if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -57,12 +47,8 @@ if [ "$skip_confirm" = false ]; then
   fi
 fi
 
-rm -rf dist build
-python -m build
-python -m twine check dist/*
-
 git tag "$tag"
-git push --tags
-python -m twine upload dist/*
+git push origin main --tags
 
-echo "Released ${tag}"
+echo "Tagged ${tag} and pushed. Watch the publish workflow at:"
+echo "  https://github.com/larsderidder/payload-redactor/actions"
