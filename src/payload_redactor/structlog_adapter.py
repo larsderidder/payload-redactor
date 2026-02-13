@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from payload_redactor.redaction import redact_sensitive_info
+from payload_redactor.redaction import Policy, _resolve_policy, redact_sensitive_info
 
 
 def redact_event_dict(
@@ -12,6 +12,7 @@ def redact_event_dict(
     __,
     event_dict: dict[str, Any],
     *,
+    policy: Policy | None = None,
     sensitive_keywords: Iterable[str] | None = None,
     excluded_keywords: Iterable[str] | None = None,
     replacement: str = "[REDACTED]",
@@ -20,10 +21,16 @@ def redact_event_dict(
     """
     Structlog processor that redacts sensitive data in event dictionaries.
     """
-    return redact_sensitive_info(
-        event_dict,
+    resolved_kw, resolved_ex, resolved_kr = _resolve_policy(
+        policy,
         sensitive_keywords=sensitive_keywords,
         excluded_keywords=excluded_keywords,
-        replacement=replacement,
         key_replacements=key_replacements,
+    )
+    return redact_sensitive_info(
+        event_dict,
+        sensitive_keywords=resolved_kw,
+        excluded_keywords=resolved_ex,
+        replacement=replacement,
+        key_replacements=resolved_kr,
     )

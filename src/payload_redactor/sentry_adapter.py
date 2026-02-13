@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Iterable
 
-from payload_redactor.redaction import redact_sensitive_info
+from payload_redactor.redaction import Policy, _resolve_policy, redact_sensitive_info
 
 
 def parse_message_from_json_to_dict(message: str | None) -> dict[str, Any]:
@@ -144,6 +144,7 @@ def redact_sentry_before_send(
     event: dict[str, Any],
     hint: dict[str, Any] | None,
     *,
+    policy: Policy | None = None,
     sensitive_keywords: Iterable[str] | None = None,
     excluded_keywords: Iterable[str] | None = None,
     replacement: str = "[REDACTED]",
@@ -152,33 +153,20 @@ def redact_sentry_before_send(
     """
     Redact sensitive data for use with Sentry's before_send hook.
     """
-    _redact_event_extra(
-        event,
-        hint,
+    resolved_kw, resolved_ex, resolved_kr = _resolve_policy(
+        policy,
         sensitive_keywords=sensitive_keywords,
         excluded_keywords=excluded_keywords,
-        replacement=replacement,
         key_replacements=key_replacements,
     )
-    _redact_breadcrumbs(
-        event,
-        sensitive_keywords=sensitive_keywords,
-        excluded_keywords=excluded_keywords,
+    kwargs: dict[str, Any] = dict(
+        sensitive_keywords=resolved_kw,
+        excluded_keywords=resolved_ex,
         replacement=replacement,
-        key_replacements=key_replacements,
+        key_replacements=resolved_kr,
     )
-    _redact_exception_vars(
-        event,
-        sensitive_keywords=sensitive_keywords,
-        excluded_keywords=excluded_keywords,
-        replacement=replacement,
-        key_replacements=key_replacements,
-    )
-    _redact_request_headers(
-        event,
-        sensitive_keywords=sensitive_keywords,
-        excluded_keywords=excluded_keywords,
-        replacement=replacement,
-        key_replacements=key_replacements,
-    )
+    _redact_event_extra(event, hint, **kwargs)
+    _redact_breadcrumbs(event, **kwargs)
+    _redact_exception_vars(event, **kwargs)
+    _redact_request_headers(event, **kwargs)
     return event

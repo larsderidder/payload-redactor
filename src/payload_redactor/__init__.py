@@ -12,6 +12,12 @@ from payload_redactor.redaction import (
 from payload_redactor.logging_adapter import RedactingFilter, make_redacting_filter, redact_log_record
 from payload_redactor.sentry_adapter import redact_sentry_before_send
 from payload_redactor.structlog_adapter import redact_event_dict
+from payload_redactor.traceback import (
+    format_redacted_exception,
+    install_excepthook,
+    redact_traceback,
+    redacting_excepthook,
+)
 
 __all__ = [
     "get_default_sensitive_keywords",
@@ -26,4 +32,8 @@ __all__ = [
     "RedactingFilter",
     "make_redacting_filter",
     "Policy",
+    "format_redacted_exception",
+    "install_excepthook",
+    "redact_traceback",
+    "redacting_excepthook",
 ]

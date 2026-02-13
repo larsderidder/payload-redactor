@@ -1,5 +1,10 @@
 # payload-redactor
 
+[![PyPI version](https://img.shields.io/pypi/v/payload-redactor)](https://pypi.org/project/payload-redactor/)
+[![CI](https://github.com/larsderidder/payload-redactor/actions/workflows/ci.yml/badge.svg)](https://github.com/larsderidder/payload-redactor/actions/workflows/ci.yml)
+[![Python versions](https://img.shields.io/pypi/pyversions/payload-redactor)](https://pypi.org/project/payload-redactor/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Pure-function helpers for redacting sensitive data in structured payloads.
 Deterministic key-based payload redaction (not PII detection).
 Designed as a small, composable core rather than a framework-centric solution.
@@ -186,6 +191,58 @@ Output:
 
 ```text
 *** ***
+```
+
+## Traceback redaction
+
+Tracebacks with captured locals can leak secrets. The `redact_traceback`
+function scans `name = value` lines and redacts any value where the variable
+name contains a sensitive keyword.
+
+```python
+import sys
+import traceback
+from payload_redactor import redact_traceback
+
+try:
+    password = "super_secret"
+    api_key = "sk-12345"
+    raise ValueError("connection failed")
+except:
+    tb = traceback.TracebackException(*sys.exc_info(), capture_locals=True)
+    print(redact_traceback("".join(tb.format())))
+```
+
+Output:
+
+```text
+Traceback (most recent call last):
+  File "app.py", line 5, in <module>
+    raise ValueError("connection failed")
+    password = [REDACTED]
+    api_key = [REDACTED]
+ValueError: connection failed
+```
+
+Or format an exception directly:
+
+```python
+from payload_redactor import format_redacted_exception
+
+try:
+    secret_token = "tok-abc"
+    raise RuntimeError("boom")
+except RuntimeError as exc:
+    print(format_redacted_exception(exc))
+```
+
+Install a `sys.excepthook` replacement so uncaught exceptions are automatically
+redacted before printing to stderr:
+
+```python
+from payload_redactor import install_excepthook
+
+install_excepthook()
 ```
 
 ## Structlog adapter (optional)

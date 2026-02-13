@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import Any, Iterable, Pattern
+from typing import Any, Callable, Iterable, Pattern
 
 
 SENSITIVE_TERMS = ["token", "secret", "password", "key", "authorization"]
@@ -26,6 +26,27 @@ class Policy:
     string_rules: Iterable[str | Pattern[str]] | None = None
     header_patterns: Iterable[str | Pattern[str]] | None = None
     path_rules: Iterable[tuple[str, ...]] | None = None
+
+
+def _resolve_policy(
+    policy: Policy | None,
+    *,
+    sensitive_keywords: Iterable[str] | None = None,
+    excluded_keywords: Iterable[str] | None = None,
+    key_replacements: dict[str, str] | None = None,
+) -> tuple[
+    Iterable[str] | None,
+    Iterable[str] | None,
+    dict[str, str] | None,
+]:
+    """Merge explicit keyword overrides with a Policy, preferring explicit values."""
+    return (
+        sensitive_keywords or (policy.sensitive_keywords if policy else None),
+        excluded_keywords or (policy.excluded_keywords if policy else None),
+        key_replacements
+        if key_replacements is not None
+        else (policy.key_replacements if policy else None),
+    )
 
 
 def _normalize_terms(terms: Iterable[str] | None, fallback: list[str]) -> list[str]:
@@ -179,21 +200,19 @@ def redact(
     """
     Redact sensitive information from data based on keyword and rule matching.
     """
-    policy_sensitive = policy.sensitive_keywords if policy else None
-    policy_excluded = policy.excluded_keywords if policy else None
-    policy_key_replacements = policy.key_replacements if policy else None
+    resolved_kw, resolved_ex, resolved_kr = _resolve_policy(
+        policy,
+        sensitive_keywords=sensitive_keywords,
+        excluded_keywords=excluded_keywords,
+        key_replacements=key_replacements,
+    )
     policy_string_rules = policy.string_rules if policy else None
     policy_header_patterns = policy.header_patterns if policy else None
     policy_path_rules = policy.path_rules if policy else None
 
-    keywords = _normalize_terms(sensitive_keywords or policy_sensitive, SENSITIVE_TERMS)
-    excludes = _normalize_terms(excluded_keywords or policy_excluded, EXCLUDED_TERMS)
-    replacement_source = (
-        key_replacements
-        if key_replacements is not None
-        else (policy_key_replacements or {})
-    )
-    replacements = {key.lower(): value for key, value in replacement_source.items()}
+    keywords = _normalize_terms(resolved_kw, SENSITIVE_TERMS)
+    excludes = _normalize_terms(resolved_ex, EXCLUDED_TERMS)
+    replacements = {key.lower(): value for key, value in (resolved_kr or {}).items()}
     string_patterns = _compile_patterns(string_rules or policy_string_rules)
     string_patterns += _compile_patterns(header_patterns or policy_header_patterns)
     normalized_paths = _normalize_path_rules(path_rules or policy_path_rules)
@@ -225,16 +244,13 @@ def redact_sensitive_info(
 
     Use key_replacements to override the replacement per key.
     """
-    keywords = _normalize_terms(sensitive_keywords, SENSITIVE_TERMS)
-    excludes = _normalize_terms(excluded_keywords, EXCLUDED_TERMS)
-    replacements = {key.lower(): value for key, value in (key_replacements or {}).items()}
-
-    try:
-        return _apply_redaction(
-            data, keywords, excludes, replacement, replacements, [], [], ()
-        )
-    except Exception:
-        return data
+    return redact(
+        data,
+        replacement=replacement,
+        sensitive_keywords=sensitive_keywords,
+        excluded_keywords=excluded_keywords,
+        key_replacements=key_replacements,
+    )
 
 
 def redact_with(
@@ -245,15 +261,13 @@ def redact_with(
     key_replacements: dict[str, str] | None = None,
 ) -> dict[str, Any] | list | str:
     """Redact sensitive info with a custom replacement string."""
-    keywords = _normalize_terms(sensitive_keywords, SENSITIVE_TERMS)
-    excludes = _normalize_terms(excluded_keywords, EXCLUDED_TERMS)
-    replacements = {key.lower(): value for key, value in (key_replacements or {}).items()}
-    try:
-        return _apply_redaction(
-            data, keywords, excludes, replacement, replacements, [], [], ()
-        )
-    except Exception:
-        return data
+    return redact(
+        data,
+        replacement=replacement,
+        sensitive_keywords=sensitive_keywords,
+        excluded_keywords=excluded_keywords,
+        key_replacements=key_replacements,
+    )
 
 
 def make_redactor(
@@ -261,18 +275,16 @@ def make_redactor(
     sensitive_keywords: Iterable[str] | None = None,
     excluded_keywords: Iterable[str] | None = None,
     key_replacements: dict[str, str] | None = None,
-):
+) -> Callable[[dict[str, Any] | list | str], dict[str, Any] | list | str]:
     """Return a redaction function with preset parameters."""
-    keywords = _normalize_terms(sensitive_keywords, SENSITIVE_TERMS)
-    excludes = _normalize_terms(excluded_keywords, EXCLUDED_TERMS)
-    replacements = {key.lower(): value for key, value in (key_replacements or {}).items()}
 
     def _redactor(data: dict[str, Any] | list | str) -> dict[str, Any] | list | str:
-        try:
-            return _apply_redaction(
-                data, keywords, excludes, replacement, replacements, [], [], ()
-            )
-        except Exception:
-            return data
+        return redact(
+            data,
+            replacement=replacement,
+            sensitive_keywords=sensitive_keywords,
+            excluded_keywords=excluded_keywords,
+            key_replacements=key_replacements,
+        )
 
     return _redactor
