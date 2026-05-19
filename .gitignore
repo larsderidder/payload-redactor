@@ -8,3 +8,10 @@ build/
 .coverage
 .mypy_cache/
 .idea
+
+.idea/
+.env
+.env.*
+!.env.example
+project-export-*.csv
+assignee-map.json
