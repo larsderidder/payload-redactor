@@ -43,9 +43,11 @@ def _resolve_policy(
     return (
         sensitive_keywords or (policy.sensitive_keywords if policy else None),
         excluded_keywords or (policy.excluded_keywords if policy else None),
-        key_replacements
-        if key_replacements is not None
-        else (policy.key_replacements if policy else None),
+        (
+            key_replacements
+            if key_replacements is not None
+            else (policy.key_replacements if policy else None)
+        ),
     )
 
 
@@ -111,8 +113,9 @@ def is_sensitive_key(
 
 def _mask_string(value: str, keywords: Iterable[str], replacement: str) -> str:
     """Mask keyword matches within a string."""
+    escaped_keywords = [re.escape(keyword) for keyword in keywords]
     return re.sub(
-        r"\b(?:" + "|".join(keywords) + r")\b",
+        r"\b(?:" + "|".join(escaped_keywords) + r")\b",
         replacement,
         value,
         flags=re.IGNORECASE,

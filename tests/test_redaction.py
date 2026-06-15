@@ -39,6 +39,17 @@ def test_redact_with_replacement():
     assert redacted["token"] == "<hidden>"
 
 
+def test_redact_escapes_custom_keywords_in_strings():
+    redacted = redact(
+        "api.key appears here", sensitive_keywords=["api.key"], replacement="***"
+    )
+    assert redacted == "*** appears here"
+    assert (
+        redact("apiXkey stays", sensitive_keywords=["api.key"], replacement="***")
+        == "apiXkey stays"
+    )
+
+
 def test_make_redactor():
     redactor = make_redactor(replacement="***")
     assert redactor({"secret": "x"})["secret"] == "***"
@@ -88,7 +99,9 @@ def test_redact_sentry_before_send():
     event = {
         "extra": {"exception": "Traceback line\nValueError: bad"},
         "logentry": {},
-        "breadcrumbs": {"values": [{"type": "log", "message": "{'event': 'password'}"}]},
+        "breadcrumbs": {
+            "values": [{"type": "log", "message": "{'event': 'password'}"}]
+        },
         "request": {"headers": {"authorization": "Bearer abc"}},
     }
     hint = {"log_record": DummyRecord({"event": "oops", "password": "secret"})}

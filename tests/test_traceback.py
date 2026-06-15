@@ -1,6 +1,5 @@
 import sys
 import textwrap
-import traceback
 
 from payload_redactor.traceback import (
     format_redacted_exception,
@@ -11,7 +10,8 @@ from payload_redactor.traceback import (
 
 
 def test_redacts_sensitive_local_variables():
-    tb = textwrap.dedent("""\
+    tb = textwrap.dedent(
+        """\
         Traceback (most recent call last):
           File "app.py", line 10, in login
             raise AuthError("bad credentials")
@@ -20,7 +20,8 @@ def test_redacts_sensitive_local_variables():
             api_key = 'sk-12345'
             retries = 3
         AuthError: bad credentials
-    """)
+    """
+    )
     redacted = redact_traceback(tb)
     assert "password = [REDACTED]" in redacted
     assert "api_key = [REDACTED]" in redacted
@@ -32,7 +33,8 @@ def test_redacts_sensitive_local_variables():
 
 
 def test_redacts_token_and_secret_variations():
-    tb = textwrap.dedent("""\
+    tb = textwrap.dedent(
+        """\
         Traceback (most recent call last):
           File "app.py", line 5, in fetch
             raise ConnectionError("timeout")
@@ -41,7 +43,8 @@ def test_redacts_token_and_secret_variations():
             refresh_token_value = 'rt-123'
             timeout = 30
         ConnectionError: timeout
-    """)
+    """
+    )
     redacted = redact_traceback(tb)
     assert "access_token = [REDACTED]" in redacted
     assert "client_secret = [REDACTED]" in redacted
@@ -57,9 +60,7 @@ def test_custom_replacement():
 
 def test_custom_keywords():
     tb = "    email = 'alice@example.com'\n    password = 'secret'\n"
-    redacted = redact_traceback(
-        tb, sensitive_keywords=["email"], replacement="<GONE>"
-    )
+    redacted = redact_traceback(tb, sensitive_keywords=["email"], replacement="<GONE>")
     assert "email = <GONE>" in redacted
     # password is NOT in custom keywords, so it stays
     assert "password = 'secret'" in redacted
@@ -75,27 +76,29 @@ def test_excluded_keywords():
 
 
 def test_string_rules_applied():
-    tb = textwrap.dedent("""\
+    tb = textwrap.dedent(
+        """\
         Traceback (most recent call last):
           File "app.py", line 3, in connect
             raise ConnectionError("https://user:pass@host/db")
             dsn = 'https://key@sentry.io/1'
         ConnectionError: https://user:pass@host/db
-    """)
-    redacted = redact_traceback(
-        tb, string_rules=[r"https://\S+@\S+"]
+    """
     )
+    redacted = redact_traceback(tb, string_rules=[r"https://\S+@\S+"])
     assert "key@sentry" not in redacted
     assert "user:pass@host" not in redacted
 
 
 def test_preserves_non_assignment_lines():
-    tb = textwrap.dedent("""\
+    tb = textwrap.dedent(
+        """\
         Traceback (most recent call last):
           File "app.py", line 10, in login
             result = do_login(user, password)
         ValueError: invalid credentials
-    """)
+    """
+    )
     redacted = redact_traceback(tb)
     # The source line `result = do_login(...)` should NOT be redacted
     # because `result` is not a sensitive keyword.
