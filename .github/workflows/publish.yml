@@ -4,6 +4,10 @@ on:
   push:
     tags: ["v*"]
 
+# Older supported Python versions have pip releases with outdated bundled roots.
+env:
+  PIP_CERT: /etc/ssl/certs/ca-certificates.crt
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -12,6 +16,8 @@ jobs:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
     steps:
+      - name: Update system CA certificates
+        run: sudo apt-get update && sudo apt-get install -y --reinstall ca-certificates
       - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -19,6 +25,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
+          # pip's truststore mode also loads its vendored roots.
+          cp "$PIP_CERT" "$(python -m pip._vendor.certifi)"
           python -m pip install -U pip
           python -m pip install -e ".[dev]"
       - name: Run tests
@@ -28,6 +36,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
+      - name: Update system CA certificates
+        run: sudo apt-get update && sudo apt-get install -y --reinstall ca-certificates
       - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -35,6 +45,7 @@ jobs:
           python-version: "3.12"
       - name: Build sdist and wheel
         run: |
+          cp "$PIP_CERT" "$(python -m pip._vendor.certifi)"
           python -m pip install -U pip build
           python -m build
       - name: Upload dist artifacts
